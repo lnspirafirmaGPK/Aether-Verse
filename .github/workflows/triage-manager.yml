@@ -1,0 +1,73 @@
+name: "Project Auto-Manager"
+
+on:
+  issues:
+    types: [opened, reopened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+  repository: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Onboarding: ทักทาย Contributor หน้าใหม่
+      - name: "Welcome Newcomer"
+        if: github.event.action == 'opened' && github.actor != github.repository_owner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // เรียก GitHub API เพื่อดูว่าเคยมี PR มาก่อนไหม
+            const creator = context.payload.sender.login;
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              creator: creator
+            });
+            
+            if (prs.length <= 1) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `👋 ยินดีต้อนรับคุณ @${creator} สู่จักรวาลของเรา! ขอบคุณที่มาร่วมสร้างสรรค์ครับ`
+              });
+            }
+
+      # 2. Auto-Labeling: ติดป้ายตาม Keywords
+      - name: "Auto Labeler"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue ? context.payload.issue.body : context.payload.pull_request.body;
+            const title = context.payload.issue ? context.payload.issue.title : context.payload.pull_request.title;
+            const text = (title + " " + body).toLowerCase();
+            
+            const labels = [];
+            if (text.includes('bug') || text.includes('error')) labels.push('bug');
+            if (text.includes('feature') || text.includes('add')) labels.push('enhancement');
+            if (text.includes('urgent')) labels.push('high-priority');
+            
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labels
+              });
+            }
+
+      # 3. Project Planning: ย้ายเข้าบอร์ดอัตโนมัติ (ใช้ gh cli)
+      - name: "Add to Project Board"
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECT_TOKEN }} # ต้องใช้ Token ที่มีสิทธิ์อ่านเขียน Project
+          PROJECT_NUMBER: 1 # เลข Project ของคุณ
+          USER: my-username
+        run: |
+          gh project item-create $PROJECT_NUMBER --owner $USER --url ${{ github.event.issue.html_url || github.event.pull_request.html_url }}
+
