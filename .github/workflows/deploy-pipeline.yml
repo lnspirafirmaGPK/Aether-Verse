@@ -1,0 +1,41 @@
+name: "CI/CD Pipeline"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. Testing Stage (ทำงานทุกครั้ง)
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies (UV)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv sync
+      - name: Run Tests
+        run: uv run pytest
+
+  # 2. Deployment Stage (ทำงานเฉพาะ push main และต้องผ่านการอนุมัติ)
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: 
+      name: production  # <-- หัวใจสำคัญ: GitHub จะหยุดรอ Approval ตรงนี้
+      url: https://api.myservice.com
+    
+    steps:
+      - name: Deploy to Production
+        run: |
+          echo "🚀 Deploying to Production Server..."
+          # ใส่ Script deploy จริงที่นี่ เช่น
+          # uv run fab deploy
+          
