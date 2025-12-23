@@ -70,4 +70,3 @@ jobs:
           USER: my-username
         run: |
           gh project item-create $PROJECT_NUMBER --owner $USER --url ${{ github.event.issue.html_url || github.event.pull_request.html_url }}
-
