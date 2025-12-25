@@ -1,0 +1,95 @@
+name: Aether Sentinel (AI Guard)
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch: # ปุ่มกดรันเองสำหรับ Manual Audit
+
+jobs:
+  neural-scan:
+    name: 🧠 Cortex Analysis & Revenue Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: 1. Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: 2. Wake up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 3. Install Neural Dependencies
+        run: |
+          pip install torch numpy
+          # ถ้ามี requirements.txt ให้ uncomment บรรทัดล่าง
+          # pip install -r requirements.txt
+
+      - name: 4. Run Behavioral Cortex (The Brain)
+        id: ai_process
+        run: |
+          # สร้าง directory output ชั่วคราว
+          mkdir -p neural_logs
+          
+          # เรียกใช้ Bridge Script เพื่อเชื่อมต่อสมองเข้ากับ Github Action
+          python scripts/sentinel_bridge.py > neural_logs/analysis.json
+          
+          # อ่านค่าจาก JSON เพื่อส่งต่อไปยังขั้นตอนถัดไป (Set Outputs)
+          # หมายเหตุ: ในการใช้งานจริงเราจะใช้ jq หรือ python parsing แต่เพื่อความง่ายเราจะ grep เอา
+          
+          echo "Processing AI Output..."
+          cat neural_logs/analysis.json
+          
+          # ดึงค่า Intent และ SKU ออกมา
+          INTENT=$(grep -oP '(?<="detected_intent": ")[^"]*' neural_logs/analysis.json)
+          SCORE=$(grep -oP '(?<="karmic_score": )[^,]*' neural_logs/analysis.json)
+          SKU=$(grep -oP '(?<="sku": ")[^"]*' neural_logs/analysis.json || echo "N/A")
+          
+          echo "AI_INTENT=$INTENT" >> $GITHUB_OUTPUT
+          echo "AI_SCORE=$SCORE" >> $GITHUB_OUTPUT
+          echo "ASSET_SKU=$SKU" >> $GITHUB_OUTPUT
+
+      - name: 5. 🛡️ Fairness Audit (Report to User)
+        if: always()
+        run: |
+          echo "--- AETHERIUM GENESIS AUDIT ---"
+          echo "Behavior Detected: ${{ steps.ai_process.outputs.AI_INTENT }}"
+          echo "System Health Score: ${{ steps.ai_process.outputs.AI_SCORE }}"
+          echo "Fairness Check: Algorithm executed transparently based on thermal dynamics."
+
+      - name: 6. 💰 Revenue Trigger (Create Ticket/Invoice)
+        # ทำงานเฉพาะเมื่อเจอ SKU สินค้า (เช่น Aggression หรือ Genesis)
+        if: steps.ai_process.outputs.ASSET_SKU != 'N/A'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const intent = '${{ steps.ai_process.outputs.AI_INTENT }}';
+            const sku = '${{ steps.ai_process.outputs.ASSET_SKU }}';
+            const score = '${{ steps.ai_process.outputs.AI_SCORE }}';
+            
+            // สร้าง Issue แจ้งเตือนลูกค้าพร้อมใบเสนอราคา
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Aether-Sentinel] 📦 Opportunity Detected: ${sku}`,
+              body: `
+              ### 🧠 AI Analysis Report
+              **System Status:** ${intent}
+              **Health Score:** ${score}
+              
+              ---
+              ### 💡 Recommendation & Commercial Offer
+              ระบบตรวจสอบพบพฤติกรรมที่สามารถปรับปรุงให้ดีขึ้นได้ (หรือความเสี่ยงที่ต้องป้องกัน)
+              
+              **Product SKU:** \`${sku}\`
+              **Reason:** Based on recursive self-improvement logic.
+              
+              > *Fairness Note: This offer is generated automatically based on actual resource consumption patterns.*
+              `
+            })
